@@ -201,6 +201,7 @@ class EntityEdge(Edge):
     attributes: dict[str, Any] = Field(
         default={}, description='Additional attributes of the edge. Dependent on edge name'
     )
+    score: float | None = Field(default=None, description='Relevance score from search')
 
     async def generate_embedding(self, embedder: EmbedderClient):
         start = time()
@@ -466,6 +467,7 @@ def get_entity_edge_from_record(record: Any) -> EntityEdge:
         valid_at=parse_db_date(record['valid_at']),
         invalid_at=parse_db_date(record['invalid_at']),
         attributes=record['attributes'],
+        score=record.get('score'),
     )
 
     edge.attributes.pop('uuid', None)
