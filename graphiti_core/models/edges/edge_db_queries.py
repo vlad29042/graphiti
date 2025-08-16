@@ -98,8 +98,7 @@ ENTITY_EDGE_RETURN = """
     e.expired_at AS expired_at,
     e.valid_at AS valid_at,
     e.invalid_at AS invalid_at,
-    properties(e) AS attributes,
-    score AS score
+    properties(e) AS attributes
 """
 
 
