@@ -18,5 +18,6 @@ from .client import LLMClient
 from .config import LLMConfig
 from .errors import RateLimitError
 from .openai_client import OpenAIClient
+from .n8n_client import N8nClient
 
-__all__ = ['LLMClient', 'OpenAIClient', 'LLMConfig', 'RateLimitError']
+__all__ = ['LLMClient', 'OpenAIClient', 'N8nClient', 'LLMConfig', 'RateLimitError']

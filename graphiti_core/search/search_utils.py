@@ -154,6 +154,21 @@ async def edge_fulltext_search(
     filter_query, filter_params = edge_search_filter_query_constructor(search_filter)
 
     if driver.provider == GraphProvider.FALKORDB:
+        # TODO: ИСПРАВИТЬ! Это костыльное решение!
+        # FalkorDB ПОДДЕРЖИВАЕТ нативный поиск по связям через db.idx.fulltext.queryRelationships
+        # См. https://docs.falkordb.com/cypher/indexing.html
+        #
+        # Правильное решение:
+        # query = (
+        #     """
+        #     CALL db.idx.fulltext.queryRelationships('RELATES_TO', $query)
+        #     YIELD relationship AS rel, score
+        #     MATCH (n:Entity)-[e:RELATES_TO {uuid: rel.uuid}]->(m:Entity)
+        #     WHERE e.group_id IN $group_ids
+        #     """ + filter_query + ...
+        # )
+        #
+        # ТЕКУЩЕЕ РЕШЕНИЕ:
         # FalkorDB: Use FactIndex nodes for fulltext search
         # This enables RediSearch operators: wildcards (*), phrases (""), OR (|), NOT (-)
         query = (

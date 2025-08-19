@@ -155,6 +155,10 @@ async def add_nodes_and_edges_bulk_tx(
         edge_data.update(edge.attributes or {})
         edges.append(edge_data)
 
+    # ВАЖНО: FactIndex - НЕОБХОДИМОЕ решение для FalkorDB!
+    # FalkorDB v4.2.2 НЕ поддерживает db.idx.fulltext.queryRelationships
+    # Тестирование показало, что эта процедура не зарегистрирована
+    # См. FALKORDB_ACTUAL_CAPABILITIES.md для результатов тестов
     # Create FactIndex nodes for FalkorDB fulltext search
     fact_index_nodes = []
     if driver.provider == GraphProvider.FALKORDB:

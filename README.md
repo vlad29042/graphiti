@@ -1,94 +1,100 @@
-# 🚀 FalkorDB Fork of Graphiti
+# 🚀 Форк Graphiti с поддержкой FalkorDB
 
-> **IMPORTANT**: This is a fork of [Graphiti](https://github.com/getzep/graphiti) that replaces Neo4j with FalkorDB and adds critical features for production use.
+> **ВАЖНО**: Это форк [Graphiti](https://github.com/getzep/graphiti), который заменяет Neo4j на FalkorDB и добавляет критически важные функции для production использования.
 
-## 🎯 What This Fork Provides
+## 🎯 Что добавлено в этом форке
 
-### 1. **FalkorDB as Primary Database** (Neo4j Replacement)
-- **Problem with Neo4j**: Community Edition lacks vector search (`vector.similarity.cosine` requires Enterprise license)
-- **Solution**: FalkorDB has native vector support via `vecf32` type - no license restrictions
-- **Benefits**: 
-  - Smaller Docker image
-  - Faster startup
-  - Native vector operations out of the box
-  - Full open source
+### 1. **FalkorDB как основная база данных** (замена Neo4j)
+- **Проблема с Neo4j**: Community Edition не поддерживает векторный поиск (`vector.similarity.cosine` требует Enterprise лицензию)
+- **Решение**: FalkorDB имеет нативную поддержку векторов через тип `vecf32` - без ограничений лицензии
+- **Преимущества**: 
+  - Меньший размер Docker образа
+  - Быстрее запускается
+  - Нативные векторные операции из коробки
+  - Полностью open source
 
-### 2. **Fulltext Search on Relationships**
-- **Problem**: FalkorDB v4.2.2 doesn't support `db.idx.fulltext.queryRelationships` ([planned in Issue #1211](https://github.com/FalkorDB/FalkorDB/issues/1211))
-- **Solution**: Implemented FactIndex pattern for fulltext search on facts
-- **How it works**:
+### 2. **Полнотекстовый поиск по связям (relationships)**
+- **Проблема**: FalkorDB v4.2.2 не поддерживает `db.idx.fulltext.queryRelationships` ([планируется в Issue #1211](https://github.com/FalkorDB/FalkorDB/issues/1211))
+- **Решение**: Реализован паттерн FactIndex для полнотекстового поиска по фактам
+- **Как работает**:
   ```cypher
-  # Instead of (not available in FalkorDB):
-  CALL db.idx.fulltext.queryRelationships('RELATES_TO', 'search query')
+  # Вместо (недоступно в FalkorDB):
+  CALL db.idx.fulltext.queryRelationships('RELATES_TO', 'поисковый запрос')
   
-  # We use:
-  CALL db.idx.fulltext.queryNodes('FactIndex', 'search query')
+  # Используем:
+  CALL db.idx.fulltext.queryNodes('FactIndex', 'поисковый запрос')
   YIELD node, score
   MATCH (n)-[e:RELATES_TO {uuid: node.fact_id}]->(m)
   ```
-- **Supports all RediSearch operators**: wildcards (*), phrases (""), OR (|), NOT (-)
+- **Поддерживает все операторы RediSearch**: wildcards (*), фразы (""), OR (|), NOT (-)
 
-### 3. **Relevance Score in Results**
-- **Problem**: Original Graphiti calculates score but doesn't return it
-- **Solution**: Modified search methods to include score in results
-- **Usage**: `edge.score` is now available in search results for filtering
+### 3. **Relevance Score в результатах**
+- **Проблема**: Оригинальный Graphiti вычисляет score, но не возвращает его
+- **Решение**: Модифицированы методы поиска для включения score в результаты
+- **Использование**: `edge.score` теперь доступен в результатах поиска для фильтрации
 
-## 📦 Quick Start with FalkorDB
+## 📦 Быстрый старт с FalkorDB
 
 ```python
 from graphiti_core import Graphiti
 from graphiti_core.driver.falkordb_driver import FalkorDriver
 
-# Connect to FalkorDB (instead of Neo4j)
+# Подключение к FalkorDB (вместо Neo4j)
 driver = FalkorDriver(
     host="localhost",
     port=6379,
-    password=""  # or your password
+    password=""  # или ваш пароль
 )
 
-# Everything else works the same!
+# Всё остальное работает так же!
 graphiti = Graphiti(graph_driver=driver)
 
-# Add data
+# Добавление данных
 await graphiti.add_episode(
-    name="Company Facts",
-    episode_body="Tesla was founded by Elon Musk in 2003.",
-    source_description="Business data"
+    name="Факты о компании",
+    episode_body="Tesla была основана Илоном Маском в 2003 году.",
+    source_description="Бизнес данные"
 )
 
-# Search with relevance scores
-results = await graphiti.search("Tesla founded*")
+# Поиск с оценкой релевантности
+results = await graphiti.search("Tesla основана*")
 for edge in results:
-    print(f"Fact: {edge.fact}")
-    print(f"Score: {edge.score}")  # Now available!
+    print(f"Факт: {edge.fact}")
+    print(f"Релевантность: {edge.score}")  # Теперь доступно!
 ```
 
-## 🔧 Technical Details
+## 🔧 Технические детали
 
-### FactIndex Implementation
-Located in: `graphiti_core/search/search_utils.py::edge_fulltext_search()`
+### Реализация FactIndex
+Расположена в: `graphiti_core/search/search_utils.py::edge_fulltext_search()`
 
-When relationships are created, corresponding FactIndex nodes are automatically generated:
+При создании связей автоматически генерируются соответствующие узлы FactIndex:
 ```python
 FactIndexNode(
-    fact_id=edge.uuid,      # Links to original relationship
-    text=edge.fact,         # Full text for search
-    text_lower=fact.lower(), # Case-insensitive search
-    keywords=keywords,       # Extracted keywords
-    group_id=edge.group_id  # For filtering
+    fact_id=edge.uuid,      # Связь с оригинальной связью
+    text=edge.fact,         # Полный текст для поиска
+    text_lower=fact.lower(), # Регистронезависимый поиск
+    keywords=keywords,       # Извлечённые ключевые слова
+    group_id=edge.group_id  # Для фильтрации
 )
 ```
 
-### Modified Files
-- `graphiti_core/utils/bulk_utils.py` - Creates FactIndex nodes
-- `graphiti_core/search/search_utils.py` - Implements FactIndex search
-- `graphiti_core/graph_queries.py` - FalkorDB-specific queries
-- `graphiti_core/nodes.py` - Added FactIndexNode class
+### Изменённые файлы
+- `graphiti_core/utils/bulk_utils.py` - Создаёт узлы FactIndex
+- `graphiti_core/search/search_utils.py` - Реализует поиск через FactIndex
+- `graphiti_core/graph_queries.py` - Запросы специфичные для FalkorDB
+- `graphiti_core/nodes.py` - Добавлен класс FactIndexNode
 
-## 🔗 Related Projects
+## 🔗 Связанные проекты
 
-- **[graphiti-api](https://github.com/vlad29042/graphiti-api)** - Production HTTP API wrapper with FastAPI
-- **Original Graphiti**: See below for the complete original documentation
+- **[graphiti-api](https://github.com/vlad29042/graphiti-api)** - Production HTTP API обёртка с FastAPI
+- **Оригинальный Graphiti**: См. ниже полную оригинальную документацию
+
+## 📝 Установка форка
+
+```bash
+pip install git+https://github.com/vlad29042/graphiti.git@main
+```
 
 ---
 
@@ -101,7 +107,7 @@ FactIndexNode(
 <h1 align="center">
 Graphiti
 </h1>
-<h2 align="center"> Build Real-Time Knowledge Graphs for AI Agents</h2>
+<h2 align="center">Создавайте графы знаний реального времени для AI агентов</h2>
 <div align="center">
 
 [![Lint](https://github.com/getzep/Graphiti/actions/workflows/lint.yml/badge.svg?style=flat)](https://github.com/getzep/Graphiti/actions/workflows/lint.yml)
@@ -120,20 +126,20 @@ Graphiti
 
 </div>
 
-:star: _Help us reach more developers and grow the Graphiti community. Star this repo!_
+:star: _Помогите нам привлечь больше разработчиков и развить сообщество Graphiti. Поставьте звезду этому репозиторию!_
 
 <br />
 
 > [!TIP]
-> Check out the new [MCP server for Graphiti](mcp_server/README.md)! Give Claude, Cursor, and other MCP clients powerful Knowledge Graph-based memory.
+> Посмотрите новый [MCP сервер для Graphiti](mcp_server/README.md)! Дайте Claude, Cursor и другим MCP клиентам мощную память на основе графов знаний.
 
-Graphiti is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti continuously integrates user interactions, structured and unstructured enterprise data, and external information into a coherent, queryable graph. The framework supports incremental data updates, efficient retrieval, and precise historical queries without requiring complete graph recomputation, making it suitable for developing interactive, context-aware AI applications.
+Graphiti — это фреймворк для построения и запросов к временным графам знаний, специально разработанный для AI агентов, работающих в динамических средах. В отличие от традиционных методов RAG (Retrieval-Augmented Generation), Graphiti непрерывно интегрирует пользовательские взаимодействия, структурированные и неструктурированные корпоративные данные, а также внешнюю информацию в единый, запрашиваемый граф. Фреймворк поддерживает инкрементальные обновления данных, эффективный поиск и точные исторические запросы без необходимости полного пересчёта графа, что делает его подходящим для разработки интерактивных, контекстно-зависимых AI приложений.
 
-Use Graphiti to:
+Используйте Graphiti для:
 
-- Integrate and maintain dynamic user interactions and business data.
-- Facilitate state-based reasoning and task automation for agents.
-- Query complex, evolving data with semantic, keyword, and graph-based search methods.
+- Интеграции и поддержания динамических пользовательских взаимодействий и бизнес-данных
+- Облегчения рассуждений на основе состояний и автоматизации задач для агентов
+- Запросов к сложным, развивающимся данным с помощью семантических, ключевых слов и графовых методов поиска
 
 <br />
 
@@ -143,35 +149,31 @@ Use Graphiti to:
 
 <br />
 
-A knowledge graph is a network of interconnected facts, such as _"Kendra loves Adidas shoes."_ Each fact is a "triplet" represented by two entities, or
-nodes ("Kendra", "Adidas shoes"), and their relationship, or edge ("loves"). Knowledge Graphs have been explored
-extensively for information retrieval. What makes Graphiti unique is its ability to autonomously build a knowledge graph
-while handling changing relationships and maintaining historical context.
+Граф знаний — это сеть взаимосвязанных фактов, таких как _"Кендра любит кроссовки Adidas."_ Каждый факт — это "триплет", представленный двумя сущностями или узлами ("Кендра", "кроссовки Adidas") и их отношением или ребром ("любит"). Графы знаний широко исследовались для информационного поиска. Что делает Graphiti уникальным — это его способность автономно строить граф знаний, обрабатывая изменяющиеся отношения и поддерживая исторический контекст.
 
-## Graphiti and Zep's Context Engineering Platform.
+## Graphiti и платформа контекстной инженерии Zep
 
-Graphiti powers the core of [Zep](https://www.getzep.com), a turn-key context engineering platform for AI Agents. Zep offers agent memory, Graph RAG for dynamic data, and context retrieval and assembly.
+Graphiti является основой [Zep](https://www.getzep.com) — готовой платформы контекстной инженерии для AI агентов. Zep предлагает память агентов, Graph RAG для динамических данных, а также извлечение и сборку контекста.
 
-Using Graphiti, we've demonstrated Zep is
-the [State of the Art in Agent Memory](https://blog.getzep.com/state-of-the-art-agent-memory/).
+Используя Graphiti, мы продемонстрировали, что Zep является [передовым решением в области памяти агентов](https://blog.getzep.com/state-of-the-art-agent-memory/).
 
-Read our paper: [Zep: A Temporal Knowledge Graph Architecture for Agent Memory](https://arxiv.org/abs/2501.13956).
+Прочитайте нашу статью: [Zep: Архитектура временного графа знаний для памяти агентов](https://arxiv.org/abs/2501.13956).
 
-We're excited to open-source Graphiti, believing its potential reaches far beyond AI memory applications.
+Мы рады открыть исходный код Graphiti, веря, что его потенциал выходит далеко за рамки приложений AI памяти.
 
 <p align="center">
     <a href="https://arxiv.org/abs/2501.13956"><img src="images/arxiv-screenshot.png" alt="Zep: A Temporal Knowledge Graph Architecture for Agent Memory" width="700px"></a>
 </p>
 
-## Why Graphiti?
+## Почему Graphiti?
 
-Traditional RAG approaches often rely on batch processing and static data summarization, making them inefficient for frequently changing data. Graphiti addresses these challenges by providing:
+Традиционные подходы RAG часто полагаются на пакетную обработку и статическую суммаризацию данных, что делает их неэффективными для часто изменяющихся данных. Graphiti решает эти проблемы, предоставляя:
 
-- **Real-Time Incremental Updates:** Immediate integration of new data episodes without batch recomputation.
-- **Bi-Temporal Data Model:** Explicit tracking of event occurrence and ingestion times, allowing accurate point-in-time queries.
-- **Efficient Hybrid Retrieval:** Combines semantic embeddings, keyword (BM25), and graph traversal to achieve low-latency queries without reliance on LLM summarization.
-- **Custom Entity Definitions:** Flexible ontology creation and support for developer-defined entities through straightforward Pydantic models.
-- **Scalability:** Efficiently manages large datasets with parallel processing, suitable for enterprise environments.
+- **Инкрементальные обновления в реальном времени:** Немедленная интеграция новых эпизодов данных без пакетного пересчёта.
+- **Би-темпоральная модель данных:** Явное отслеживание времени возникновения события и времени добавления, позволяя точные запросы по времени.
+- **Эффективный гибридный поиск:** Комбинирует семантические эмбеддинги, ключевые слова (BM25) и обход графа для достижения низкой задержки запросов без зависимости от LLM суммаризации.
+- **Пользовательские определения сущностей:** Гибкое создание онтологии и поддержка определяемых разработчиком сущностей через простые модели Pydantic.
+- **Масштабируемость:** Эффективно управляет большими наборами данных с параллельной обработкой, подходит для корпоративных сред.
 
 <p align="center">
     <img src="/images/graphiti-intro-slides-stock-2.gif" alt="Graphiti structured + unstructured demo" width="700px">   
@@ -179,196 +181,196 @@ Traditional RAG approaches often rely on batch processing and static data summar
 
 ## Graphiti vs. GraphRAG
 
-| Aspect                     | GraphRAG                              | Graphiti                                         |
-| -------------------------- | ------------------------------------- | ------------------------------------------------ |
-| **Primary Use**            | Static document summarization         | Dynamic data management                          |
-| **Data Handling**          | Batch-oriented processing             | Continuous, incremental updates                  |
-| **Knowledge Structure**    | Entity clusters & community summaries | Episodic data, semantic entities, communities    |
-| **Retrieval Method**       | Sequential LLM summarization          | Hybrid semantic, keyword, and graph-based search |
-| **Adaptability**           | Low                                   | High                                             |
-| **Temporal Handling**      | Basic timestamp tracking              | Explicit bi-temporal tracking                    |
-| **Contradiction Handling** | LLM-driven summarization judgments    | Temporal edge invalidation                       |
-| **Query Latency**          | Seconds to tens of seconds            | Typically sub-second latency                     |
-| **Custom Entity Types**    | No                                    | Yes, customizable                                |
-| **Scalability**            | Moderate                              | High, optimized for large datasets               |
+| Аспект                     | GraphRAG                                     | Graphiti                                                  |
+| -------------------------- | -------------------------------------------- | --------------------------------------------------------- |
+| **Основное использование** | Статическая суммаризация документов          | Динамическое управление данными                           |
+| **Обработка данных**       | Пакетно-ориентированная обработка            | Непрерывные, инкрементальные обновления                   |
+| **Структура знаний**       | Кластеры сущностей и суммаризация сообществ | Эпизодические данные, семантические сущности, сообщества |
+| **Метод поиска**           | Последовательная LLM суммаризация            | Гибридный семантический, ключевой и графовый поиск       |
+| **Адаптивность**           | Низкая                                       | Высокая                                                   |
+| **Темпоральная обработка** | Базовое отслеживание временных меток         | Явное би-темпоральное отслеживание                       |
+| **Обработка противоречий** | LLM-управляемые суждения суммаризации        | Темпоральная инвалидация рёбер                           |
+| **Задержка запросов**      | Секунды до десятков секунд                   | Обычно суб-секундная задержка                             |
+| **Кастомные типы сущностей**| Нет                                         | Да, настраиваемые                                         |
+| **Масштабируемость**       | Умеренная                                    | Высокая, оптимизирована для больших наборов данных        |
 
-## Requirements
+## Требования
 
 - Python 3.10 - 3.12
-- LLM Provider API access (OpenAI, Anthropic, Gemini, Groq, or compatible)
-- An embedding model (Voyage, OpenAI, or compatible)
-- Graph Database (Neo4j or FalkorDB) [**Fork Note**: FalkorDB recommended]
+- Доступ к API LLM провайдера (OpenAI, Anthropic, Gemini, Groq, или совместимый)
+- Модель эмбеддингов (Voyage, OpenAI, или совместимая)
+- База данных графов (Neo4j или FalkorDB) [**Примечание форка**: FalkorDB рекомендуется]
 
-### Database Prerequisites
+### Предварительные требования для базы данных
 
 #### Neo4j
 
-- Recommended: Use [Neo4j Desktop](https://neo4j.com/download/) for local development
-- Alternatively: Create a cloud instance at [Neo4j Aura](https://neo4j.com/cloud/platform/aura-graph-database)
-- Requires APOC plugin for enhanced functionality
+- Рекомендуется: Используйте [Neo4j Desktop](https://neo4j.com/download/) для локальной разработки
+- Альтернативно: Создайте облачный экземпляр в [Neo4j Aura](https://neo4j.com/cloud/platform/aura-graph-database)
+- Требуется плагин APOC для расширенной функциональности
 
-#### FalkorDB [**Fork Note**: Preferred for this fork]
+#### FalkorDB [**Примечание форка**: Предпочтительно для этого форка]
 
-- Start FalkorDB using Docker:
+- Запустите FalkorDB используя Docker:
   ```bash
   docker run -p 6379:6379 falkordb/falkordb:v4.3.0
   ```
 
-### Environment Setup
+### Настройка окружения
 
 ```bash
-export OPENAI_API_KEY="your-api-key-here"
+export OPENAI_API_KEY="ваш-api-ключ"
 ```
 
-## Quick Start
+## Быстрый старт
 
-First, install Graphiti:
+Сначала установите Graphiti:
 
 ```bash
 pip install graphiti-core
 ```
 
-**Fork Note**: To use this FalkorDB fork instead:
+**Примечание форка**: Для использования этого форка с FalkorDB вместо этого:
 ```bash
 pip install git+https://github.com/vlad29042/graphiti.git
 ```
 
-Then set up your graph database:
+Затем настройте вашу базу данных графов:
 
 ```python
-# Original Neo4j setup
+# Оригинальная настройка Neo4j
 from graphiti_core.driver.neo4j_driver import Neo4jDriver
 
 neo4j_driver = Neo4jDriver(
     uri="bolt://localhost:7687",
     username="neo4j",
-    password="your-password"
+    password="ваш-пароль"
 )
 
-# FalkorDB setup (this fork)
+# Настройка FalkorDB (этот форк)
 from graphiti_core.driver.falkordb_driver import FalkorDriver
 
 falkor_driver = FalkorDriver(
     host="localhost",
     port=6379,
-    password=""  # optional
+    password=""  # опционально
 )
 ```
 
-Now you can create your Graphiti instance and start building your knowledge graph:
+Теперь вы можете создать экземпляр Graphiti и начать строить ваш граф знаний:
 
 ```python
 from graphiti_core import Graphiti
 from graphiti_core.clients import OpenAIClient
 from graphiti_core.embedder import OpenAIEmbedder
 
-# Initialize clients
+# Инициализация клиентов
 llm_client = OpenAIClient()
 embedder = OpenAIEmbedder()
 
-# Create Graphiti instance
+# Создание экземпляра Graphiti
 graphiti = Graphiti(
-    driver=falkor_driver,  # or neo4j_driver
+    driver=falkor_driver,  # или neo4j_driver
     llm_client=llm_client,
     embedder=embedder
 )
 
-# Add your first episode
+# Добавьте ваш первый эпизод
 await graphiti.add_episode(
-    name="User preferences",
-    episode_body="Emma loves sushi and enjoys hiking on weekends",
-    source_description="User survey"
+    name="Предпочтения пользователя",
+    episode_body="Эмма любит суши и наслаждается походами по выходным",
+    source_description="Опрос пользователей"
 )
 
-# Search the knowledge graph
-results = await graphiti.search("What does Emma enjoy?")
+# Поиск в графе знаний
+results = await graphiti.search("Что нравится Эмме?")
 print(results)
 ```
 
-## Key Features
+## Ключевые возможности
 
-### Temporal Awareness
+### Темпоральная осведомлённость
 
-Track how facts evolve:
+Отслеживайте эволюцию фактов:
 
 ```python
-# Day 1: Add initial information
+# День 1: Добавить начальную информацию
 await graphiti.add_episode(
-    name="Tech Trends 2024",
-    episode_body="Currently, React is the most popular frontend framework",
-    source_description="Industry Report",
+    name="Технологические тренды 2024",
+    episode_body="В настоящее время React является самым популярным фронтенд фреймворком",
+    source_description="Отраслевой отчёт",
     reference_time=datetime(2024, 1, 15)
 )
 
-# Day 30: Add updated information
+# День 30: Добавить обновлённую информацию
 await graphiti.add_episode(
-    name="Tech Trends Update",
-    episode_body="Vue.js has overtaken React as the most popular frontend framework",
-    source_description="Industry Report",
+    name="Обновление технологических трендов",
+    episode_body="Vue.js обогнал React как самый популярный фронтенд фреймворк",
+    source_description="Отраслевой отчёт",
     reference_time=datetime(2024, 2, 15)
 )
 
-# Query at different points in time
+# Запрос в разные моменты времени
 facts_in_january = await graphiti.search(
-    "most popular frontend framework",
+    "самый популярный фронтенд фреймворк",
     reference_time=datetime(2024, 1, 20)
 )
-# Returns: React is the most popular
+# Возвращает: React самый популярный
 
 facts_in_february = await graphiti.search(
-    "most popular frontend framework",
+    "самый популярный фронтенд фреймворк",
     reference_time=datetime(2024, 2, 20)
 )
-# Returns: Vue.js is the most popular
+# Возвращает: Vue.js самый популярный
 ```
 
-### Entity Resolution
+### Разрешение сущностей
 
-Graphiti automatically resolves entities across different contexts:
+Graphiti автоматически разрешает сущности в разных контекстах:
 
 ```python
 await graphiti.add_episode(
-    name="Meeting Notes",
-    episode_body="The CEO of TechCorp announced a new AI product",
-    source_description="Board Meeting"
+    name="Заметки встречи",
+    episode_body="CEO TechCorp объявил о новом AI продукте",
+    source_description="Собрание совета директоров"
 )
 
 await graphiti.add_episode(
-    name="Industry News",
-    episode_body="John Smith, who leads TechCorp, spoke at the AI conference",
-    source_description="Tech Conference"
+    name="Новости индустрии",
+    episode_body="Джон Смит, который возглавляет TechCorp, выступил на AI конференции",
+    source_description="Технологическая конференция"
 )
 
-# Graphiti recognizes "CEO of TechCorp" and "John Smith who leads TechCorp" 
-# as the same entity and creates unified node relationships
+# Graphiti распознает "CEO TechCorp" и "Джон Смит который возглавляет TechCorp" 
+# как одну и ту же сущность и создаёт унифицированные отношения узлов
 ```
 
-### Semantic + Graph Search
+### Семантический + Графовый поиск
 
-Combine vector similarity with graph traversal:
+Комбинируйте векторное сходство с обходом графа:
 
 ```python
-# Create rich interconnected data
+# Создание богатых взаимосвязанных данных
 await graphiti.add_episode(
-    name="Product Launch",
-    episode_body="""TechCorp's new AI assistant uses RAG architecture. 
-    The assistant was developed by the AI Research team led by Dr. Sarah Chen.""",
-    source_description="Press Release"
+    name="Запуск продукта",
+    episode_body="""AI ассистент TechCorp использует архитектуру RAG. 
+    Ассистент был разработан командой AI Research под руководством Dr. Sarah Chen.""",
+    source_description="Пресс-релиз"
 )
 
-# Search using natural language
+# Поиск используя естественный язык
 results = await graphiti.search(
-    "Who developed TechCorp's RAG system?",
+    "Кто разработал RAG систему TechCorp?",
     num_results=5
 )
-# Automatically finds connections through semantic similarity and graph relationships
+# Автоматически находит связи через семантическое сходство и отношения графа
 ```
 
-## Advanced Usage
+## Продвинутое использование
 
-### Custom Entity Types
+### Кастомные типы сущностей
 
-Define domain-specific entities:
+Определите доменно-специфичные сущности:
 
 ```python
 from pydantic import BaseModel, Field
@@ -376,12 +378,12 @@ from graphiti_core.nodes import EntityNode
 from typing import Literal
 
 class ProductNode(EntityNode):
-    """Custom node type for products"""
+    """Кастомный тип узла для продуктов"""
     label: Literal["Product"] = Field(default="Product")
-    price: float | None = Field(description="Product price in USD")
-    category: str | None = Field(description="Product category")
+    price: float | None = Field(description="Цена продукта в USD")
+    category: str | None = Field(description="Категория продукта")
 
-# Register custom entity
+# Регистрация кастомной сущности
 graphiti = Graphiti(
     driver=driver,
     llm_client=llm_client,
@@ -391,24 +393,24 @@ graphiti = Graphiti(
     }
 )
 
-# The LLM will now extract and create ProductNodes with price and category fields
+# LLM теперь будет извлекать и создавать ProductNodes с полями price и category
 await graphiti.add_episode(
-    name="Product Catalog",
-    episode_body="The new iPhone 15 Pro costs $999 and belongs to the smartphone category",
+    name="Каталог продуктов",
+    episode_body="Новый iPhone 15 Pro стоит $999 и относится к категории смартфонов",
     source_description="Apple Store"
 )
 ```
 
-### Graph Schema Definition
+### Определение схемы графа
 
-Control relationship types and connections:
+Контролируйте типы отношений и связи:
 
 ```python
 graphiti = Graphiti(
     driver=driver,
     llm_client=llm_client,
     embedder=embedder,
-    # Define allowed relationship types between entities
+    # Определите разрешённые типы отношений между сущностями
     edge_type_map={
         ("User", "Product"): ["PURCHASED", "WANTS", "REVIEWED"],
         ("Product", "Category"): ["BELONGS_TO"],
@@ -417,135 +419,135 @@ graphiti = Graphiti(
 )
 ```
 
-### Search Configuration
+### Конфигурация поиска
 
-Fine-tune search behavior:
+Точная настройка поведения поиска:
 
 ```python
 from graphiti_core.search import SearchConfig
 
 config = SearchConfig(
     max_results=20,
-    min_score=0.7,  # Minimum similarity score
-    traversal_depth=3,  # How deep to traverse relationships
-    include_neighbors=True,  # Include connected nodes
-    semantic_weight=0.7,  # Balance between semantic and graph scores
+    min_score=0.7,  # Минимальный порог сходства
+    traversal_depth=3,  # Глубина обхода отношений
+    include_neighbors=True,  # Включить связанные узлы
+    semantic_weight=0.7,  # Баланс между семантическим и графовым счётом
 )
 
 results = await graphiti.search(
-    "Emma's friends who like sushi",
+    "Друзья Эммы которые любят суши",
     search_config=config
 )
 ```
 
-## Architecture
+## Архитектура
 
-Graphiti is built on a modular architecture:
+Graphiti построен на модульной архитектуре:
 
-- **LLM Client**: Interfaces with language models for entity extraction and resolution
-- **Embedder**: Creates vector representations for semantic search
-- **Driver**: Manages database connections (Neo4j or FalkorDB)
-- **Search Engine**: Hybrid retrieval combining vectors, keywords, and graph traversal
+- **LLM Client**: Интерфейс с языковыми моделями для извлечения и разрешения сущностей
+- **Embedder**: Создаёт векторные представления для семантического поиска
+- **Driver**: Управляет подключениями к базе данных (Neo4j или FalkorDB)
+- **Search Engine**: Гибридный поиск, комбинирующий векторы, ключевые слова и обход графа
 
-The pipeline for adding information:
+Пайплайн для добавления информации:
 
-1. **Episode Processing**: Raw text is processed to extract entities and relationships
-2. **Entity Resolution**: Entities are matched against existing nodes or created
-3. **Embedding Generation**: Text chunks and entities are embedded for semantic search
-4. **Graph Construction**: Nodes and edges are created with temporal metadata
-5. **Index Updates**: Search indices are updated for efficient retrieval
+1. **Обработка эпизода**: Сырой текст обрабатывается для извлечения сущностей и отношений
+2. **Разрешение сущностей**: Сущности сопоставляются с существующими узлами или создаются
+3. **Генерация эмбеддингов**: Текстовые фрагменты и сущности эмбеддируются для семантического поиска
+4. **Построение графа**: Узлы и рёбра создаются с темпоральными метаданными
+5. **Обновление индексов**: Поисковые индексы обновляются для эффективного поиска
 
-## Best Practices
+## Лучшие практики
 
-### 1. Meaningful Episode Names
+### 1. Осмысленные имена эпизодов
 
 ```python
-# Good: Descriptive and searchable
+# Хорошо: Описательные и поисковые
 await graphiti.add_episode(
-    name="Q3 2024 Sales Meeting - Customer Feedback",
+    name="Q3 2024 Встреча по продажам - Отзывы клиентов",
     episode_body="...",
-    source_description="Quarterly Business Review"
+    source_description="Квартальный бизнес-обзор"
 )
 
-# Avoid: Generic names
+# Избегайте: Общие имена
 await graphiti.add_episode(
-    name="Meeting Notes",
+    name="Заметки встречи",
     episode_body="...",
-    source_description="Meeting"
+    source_description="Встреча"
 )
 ```
 
-### 2. Consistent Entity References
+### 2. Последовательные ссылки на сущности
 
 ```python
-# Help entity resolution by using consistent naming
+# Помогите разрешению сущностей используя последовательное именование
 episode_body = """
-Dr. Sarah Chen from the AI Research team presented the new model.
-The model developed by Dr. Chen's team shows 95% accuracy.
-"""  # "Dr. Sarah Chen" and "Dr. Chen" will be resolved to the same entity
+Dr. Sarah Chen из команды AI Research представила новую модель.
+Модель разработанная командой Dr. Chen показывает 95% точность.
+"""  # "Dr. Sarah Chen" и "Dr. Chen" будут разрешены в одну сущность
 ```
 
-### 3. Time-Based Organization
+### 3. Организация по времени
 
 ```python
 from datetime import datetime, timedelta
 
-# Add historical data with proper timestamps
+# Добавление исторических данных с правильными временными метками
 historical_data = [
-    ("Tech evolved from mainframes", datetime(1950, 1, 1)),
-    ("Personal computers emerged", datetime(1980, 1, 1)),
-    ("Internet became mainstream", datetime(1995, 1, 1)),
-    ("Cloud computing took over", datetime(2010, 1, 1))
+    ("Технологии эволюционировали от мейнфреймов", datetime(1950, 1, 1)),
+    ("Появились персональные компьютеры", datetime(1980, 1, 1)),
+    ("Интернет стал мейнстримом", datetime(1995, 1, 1)),
+    ("Облачные вычисления захватили рынок", datetime(2010, 1, 1))
 ]
 
 for content, time in historical_data:
     await graphiti.add_episode(
-        name=f"Tech History - {time.year}",
+        name=f"История технологий - {time.year}",
         episode_body=content,
-        source_description="Historical Records",
+        source_description="Исторические записи",
         reference_time=time
     )
 ```
 
-### 4. Leverage Graph Relationships
+### 4. Используйте отношения графа
 
 ```python
-# Create rich, interconnected episodes that build relationships
+# Создавайте богатые, взаимосвязанные эпизоды которые строят отношения
 await graphiti.add_episode(
-    name="Team Structure",
+    name="Структура команды",
     episode_body="""
-    Sarah leads the AI team. John works under Sarah.
-    The AI team collaborates with the Data Engineering team led by Mike.
+    Sarah возглавляет AI команду. John работает под руководством Sarah.
+    AI команда сотрудничает с командой Data Engineering под руководством Mike.
     """,
-    source_description="Org Chart"
+    source_description="Организационная схема"
 )
 
-# Later, you can traverse these relationships
-results = await graphiti.search("Who does John report to?")
+# Позже вы можете обходить эти отношения
+results = await graphiti.search("Кому подчиняется John?")
 ```
 
-## Performance Optimization
+## Оптимизация производительности
 
-### Bulk Operations
+### Массовые операции
 
 ```python
 episodes = [
     {
-        "name": f"Customer Feedback {i}",
+        "name": f"Отзыв клиента {i}",
         "episode_body": feedback,
-        "source_description": "Support Ticket"
+        "source_description": "Тикет поддержки"
     }
     for i, feedback in enumerate(feedback_list)
 ]
 
-# Process multiple episodes efficiently
+# Эффективная обработка множественных эпизодов
 await graphiti.add_episodes(episodes)
 ```
 
-### Search Optimization
+### Оптимизация поиска
 
 ```python
-# Use filters to narrow search scope
+# Используйте фильтры для сужения области поиска
 from graphiti_core.search import SearchFilters
 
 filters = SearchFilters(
@@ -555,30 +557,30 @@ filters = SearchFilters(
 )
 
 results = await graphiti.search(
-    "active team members",
+    "активные члены команды",
     filters=filters
 )
 ```
 
-## Community and Support
+## Сообщество и поддержка
 
-- [Discord Community](https://discord.com/invite/W8Kw6bsgXQ): Join for discussions and support
-- [GitHub Issues](https://github.com/getzep/graphiti/issues): Report bugs or request features
-- [Documentation](https://docs.getzep.com/graphiti): Comprehensive guides and API reference
+- [Discord сообщество](https://discord.com/invite/W8Kw6bsgXQ): Присоединяйтесь для обсуждений и поддержки
+- [GitHub Issues](https://github.com/getzep/graphiti/issues): Сообщайте об ошибках или запрашивайте функции
+- [Документация](https://docs.getzep.com/graphiti): Подробные руководства и справочник API
 
-## Contributing
+## Вклад в проект
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
+Мы приветствуем вклад! Пожалуйста, посмотрите наше [Руководство по вкладу](CONTRIBUTING.md) для деталей:
 
-- Setting up the development environment
-- Running tests
-- Submitting pull requests
-- Code style guidelines
+- Настройка среды разработки
+- Запуск тестов
+- Отправка pull requests
+- Руководство по стилю кода
 
-## License
+## Лицензия
 
-Graphiti is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for the full license text.
+Graphiti лицензирован под Apache License 2.0. См. [LICENSE](LICENSE) для полного текста лицензии.
 
 ---
 
-Built with ❤️ by the [Zep](https://www.getzep.com) team
+Создано с ❤️ командой [Zep](https://www.getzep.com)

@@ -99,8 +99,11 @@ def get_vector_cosine_func_query(vec1, vec2, provider: GraphProvider) -> str:
 
 def get_relationships_query(name: str, provider: GraphProvider) -> str:
     if provider == GraphProvider.FALKORDB:
-        # FalkorDB doesn't support fulltext search for relationships in a compatible way
-        # This is handled in search_utils.py with a hybrid approach
+        # ВАЖНО: FalkorDB v4.2.2 НЕ поддерживает db.idx.fulltext.queryRelationships
+        # Тестирование показало, что эта процедура не зарегистрирована
+        # Поэтому используется паттерн FactIndex - это ПРАВИЛЬНОЕ решение
+        # См. FALKORDB_ACTUAL_CAPABILITIES.md для результатов тестов
+        # This is handled in search_utils.py with FactIndex nodes
         return ""
         
     return f'CALL db.index.fulltext.queryRelationships("{name}", $query, {{limit: $limit}})'
